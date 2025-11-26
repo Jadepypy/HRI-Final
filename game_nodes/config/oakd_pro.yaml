@@ -1,0 +1,25 @@
+oakd_camera:
+  ros__parameters:
+    camera:
+      i_enable_imu: false
+      i_pipeline_type: Stereo          # ← STABLE
+      i_nn_type: none
+      i_usb_speed: HIGH
+      i_board_config:
+        left_fov_deg: 71.86
+        right_fov_deg: 71.86
+        rgb_fov_deg: 68.0
+        lens_position: 0
+
+    stereo:
+      i_publish_depth: true
+      i_publish_rectified: true
+      i_align_depth: true
+      i_output_depth: true
+
+    rgb:
+      i_enable_preview: true
+      i_publish_topic: true
+      i_resolution: 720P               # ← REDUCE!!!! 1080P crashes
+      i_preview_size: 416              # ← REDUCE preview size
+      i_fps: 10.0                      # ← Reduce FPS for stability

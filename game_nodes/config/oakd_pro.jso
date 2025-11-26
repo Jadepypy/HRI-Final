@@ -1,0 +1,45 @@
+{
+  "camera": {
+    "i_enable_imu": false,
+    "i_pipeline_type": "stereo",
+    "i_nn_type": "none",
+    "i_usb_speed": "HIGH",
+    "i_board_config": {
+      "left_fov_deg": 71.86,
+      "right_fov_deg": 71.86,
+      "rgb_fov_deg": 68.0,
+      "lens_position": 0
+    }
+  },
+
+  "stereo": {
+    "i_publish_depth": true,
+    "i_publish_rectified": true,
+    "i_publish_disparity": false,
+    "i_subpixel": false,
+    "i_lr_check": false,
+    "i_extended_disparity": false,
+    "i_align_depth": true,
+    "i_depth_from_defocus": false,
+    "i_output_depth": true,
+    "i_postprocessing": {
+      "i_decimation_filter": {
+        "i_decimation_factor": 1
+      },
+      "i_spatial_filter": {
+        "i_hole_filling_radius": 2,
+        "i_alpha": 0.5,
+        "i_delta": 3
+      }
+    }
+  },
+
+  "rgb": {
+    "i_enable_preview": true,
+    "i_enable_video": true,
+    "i_publish_topic": true,
+    "i_resolution": "1080P",
+    "i_preview_size": 640,
+    "i_fps": 15
+  }
+}

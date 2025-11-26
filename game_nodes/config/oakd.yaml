@@ -1,0 +1,12 @@
+camera:
+  i_enable_imu: false
+  i_enable_ir: false
+  i_enable_depth: true
+  i_enable_rectified: true
+  i_enable_rgb: true
+
+stereo:
+  enable: true
+  depth:
+    enable: true
+    output_depth: true
