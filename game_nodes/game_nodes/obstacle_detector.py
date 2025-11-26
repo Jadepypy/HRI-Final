@@ -12,7 +12,15 @@ class ObstacleDetector(Node):
     def __init__(self):
         super().__init__('obstacle_detector')
         self.bridge = CvBridge()
+
         self.STEP_SIZE = 0.5
+        self.sensor_state = {
+            "obstacle_right": False,
+            "obstacle_front": False,
+            "obstacle_left": False
+        }
+        self.latest_depth = None
+
         self.depth_topic = '/stereo/converted_depth'
         # self.color_topic = '/oakd/rgb/preview/image_raw'
 
