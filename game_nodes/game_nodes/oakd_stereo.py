@@ -54,18 +54,30 @@ class OakdStereoNode(Node):
             self.q_depth = self.device.getOutputQueue("depth", maxSize=1, blocking=False)
             self.create_timer(0.05, self.publish_frames)
         except RuntimeError as e:
+            if "X_LINK_DEVICE_ALREADY_IN_USE" in str(e):
+                self.get_logger().error(
+                    "OAK-D is locked! Unplug/replug the USB cable or kill existing python processes.")
             self.get_logger().error(f"FAILED to start OAK-D: {e}")
             raise e
 
     def publish_frames(self):
         # -------------- DEPTH ONLY --------------
-        in_depth = self.q_depth.tryGet()
-        if in_depth:
-            frame = in_depth.getFrame()
-            # OAK-D depth is uint16 in millimeters
-            msg = self.bridge.cv2_to_imgmsg(frame, encoding="16UC1")
-            msg.header.stamp = self.get_clock().now().to_msg()
-            self.depth_pub.publish(msg)
+        try:
+            in_depth = self.q_depth.tryGet()
+            if in_depth:
+                frame = in_depth.getFrame()
+                # OAK-D depth is uint16 in millimeters
+                msg = self.bridge.cv2_to_imgmsg(frame, encoding="16UC1")
+                msg.header.stamp = self.get_clock().now().to_msg()
+                self.depth_pub.publish(msg)
+        except Exception as e:
+            self.get_logger().warn(f"Frame processing error: {e}")
+
+    def destroy_node(self):
+        self.get_logger().info("Closing OAK-D device...")
+        if hasattr(self, 'device'):
+            self.device.close()
+        super().destroy_node()
 
 
 def main(args=None):
