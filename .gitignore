@@ -1,0 +1,121 @@
+# -------------------------
+# OS / Editor Junk
+# -------------------------
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Vim
+*.swp
+*.swo
+
+# VSCode
+.vscode/
+*.code-workspace
+
+# JetBrains
+.idea/
+*.iml
+
+# -------------------------
+# Python
+# -------------------------
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.python-version
+.venv/
+venv/
+env/
+build/
+dist/
+pip-wheel-metadata/
+*.egg-info/
+.eggs/
+
+# -------------------------
+# ROS2 + Colcon Workspace
+# -------------------------
+build/
+install/
+log/
+.colcon/
+CTestTestfile.cmake
+CTestTestfile.cmake.*
+test_results/
+test/
+
+# Ignore all workspace-level build artifacts
+**/build/
+**/install/
+**/log/
+
+# -------------------------
+# C / C++ Build Artifacts
+# -------------------------
+*.o
+*.a
+*.so
+*.so.*
+*.dylib
+*.dll
+*.exe
+*.out
+*.obj
+*.lib
+*.idl
+*.pdb
+
+# CMake
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+Makefile
+cmake-build-*/
+
+# -------------------------
+# Go
+# -------------------------
+bin/
+pkg/
+*.exe
+
+# -------------------------
+# Node.js
+# -------------------------
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# -------------------------
+# Docker
+# -------------------------
+*.tar
+.dockerignore
+
+# -------------------------
+# Logs & Temp Files
+# -------------------------
+*.log
+*.tmp
+*.bak
+*.old
+*.swp
+*.swo
+*.lock
+
+# -------------------------
+# Jupyter
+# -------------------------
+.ipynb_checkpoints/
+*.ipynb~
+
+# -------------------------
+# Misc
+# -------------------------
+*.zip
+*.tar.gz
+*.tgz
+*.7z
