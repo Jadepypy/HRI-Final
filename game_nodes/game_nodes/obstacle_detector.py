@@ -12,7 +12,7 @@ class ObstacleDetector(Node):
     def __init__(self):
         super().__init__('obstacle_detector')
         self.bridge = CvBridge()
-
+        self.STEP_SIZE = 0.5
         self.depth_topic = '/stereo/converted_depth'
         # self.color_topic = '/oakd/rgb/preview/image_raw'
 
@@ -41,6 +41,7 @@ class ObstacleDetector(Node):
 
     def on_depth(self, msg):
         """Standard Perception Logic from before"""
+        self.get_logger().info("on depth!")
         try:
             depth = self.bridge.imgmsg_to_cv2(msg, desired_encoding='16UC1')
             depth_m = depth.astype(np.float32) / 1000.0
@@ -77,9 +78,9 @@ class ObstacleDetector(Node):
             if self.sensor_state["obstacle_left"]:
                 self.get_logger().info(f"Obstacle detected! Left: {dist_left:.2f} m")
             self.get_logger().info(f"Sensor State: {self.sensor_state}")
-        except Exception:
-            pass
-
+        except RuntimeError as e:
+            self.get_logger().error(f"FAILED to start OAK-D: {e}")
+            raise e
     # def on_depth(self, msg: Image):
     #     try:
     #         depth = self.bridge.imgmsg_to_cv2(msg, desired_encoding='16UC1')
