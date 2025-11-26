@@ -36,7 +36,7 @@ class ObstacleDetector(Node):
         self.pub = self.create_publisher(String, '/obstacle_event', 10)
 
         self.get_logger().info(
-            f"ObstacleDetector running — depth:{self.depth_topic}  color:{self.color_topic}"
+            f"ObstacleDetector running — depth:{self.depth_topic}"
         )
 
     def on_depth(self, msg):
