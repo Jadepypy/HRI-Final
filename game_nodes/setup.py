@@ -26,10 +26,10 @@ setup(
     license='Apache License 2.0',
     entry_points={
         'console_scripts': [
-            'navigator = game_nodes.navigator:main',
+            # 'navigator = game_nodes.navigator:main',
             'obstacle_detector = game_nodes.obstacle_detector:main',
             'oakd_stereo = game_nodes.oakd_stereo:main',
-            'controller = game_nodes.controller:main'
+            # 'controller = game_nodes.controller:main'
         ],
     },
 )
