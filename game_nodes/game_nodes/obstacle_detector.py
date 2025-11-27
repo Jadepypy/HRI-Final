@@ -53,67 +53,50 @@ class ObstacleDetector(Node):
         )
 
     def on_depth(self, msg):
-        """Standard Perception Logic from before"""
+        """Fixed: Wider path detection + Sensitivity to off-center obstacles"""
         try:
             depth = self.bridge.imgmsg_to_cv2(msg, desired_encoding='16UC1')
             depth_m = depth.astype(np.float32) / 1000.0
             h, w = depth_m.shape
-            crop_w = int(w * 0.2)
+
+            # FIX 1: Widen the gaze (0.2 was too narrow, 0.6 covers robot width)
+            # Adjust this between 0.5 and 0.8 depending on how fat your robot is.
+            path_width_ratio = 0.6 
+            crop_w = int(w * path_width_ratio)
             x_start = (w - crop_w) // 2
-
-            #valid_front = front_view[front_view > 0.05]
-            # Slice Regions
-            # Front (Center)
-            #front_view = depth_m[:, col_w:2 * col_w]
-           # valid_front = front_view[front_view > 0.05]
+            
             front_view = depth_m[:, x_start : x_start + crop_w]
+
+            # Filter valid points
             valid_front = front_view[front_view > 0.05]
-            dist_front = np.median(valid_front) if valid_front.size > 0 else 9.9
 
-            # Right
-           # right_view = depth_m[:, 2 * col_w:]
-           # valid_right = right_view[right_view > 0.05]
-           # dist_right = np.median(valid_right) if valid_right.size > 0 else 9.9
+            if valid_front.size > 0:
+                # FIX 2: Use Percentile instead of Median
+                # Median (50%) ignores obstacles if they are only on one side of the path.
+                # Percentile(5) grabs the closest objects, even if they are off-center.
+                dist_front = np.percentile(valid_front, 5)
+            else:
+                dist_front = 9.9
 
-            # Left
-           # left_view = depth_m[:, :col_w]
-           # valid_left = left_view[left_view > 0.05]
-           # dist_left = np.median(valid_left) if valid_left.size > 0 else 9.9
-
-            # Update Shared State
+            # Update State
             self.sensor_state["obstacle_front"] = (dist_front < self.STEP_SIZE)
-           # self.sensor_state["obstacle_right"] = (dist_right < self.STEP_SIZE)
-           # self.sensor_state["obstacle_left"] = (dist_left < self.STEP_SIZE)
+            
+            # Reset side states
+            self.sensor_state["obstacle_left"] = False
+            self.sensor_state["obstacle_right"] = False
 
+            # Logging
             now = self.get_clock().now().nanoseconds / 1e9
             if now - self.last_log_time > self.LOG_INTERVAL:
                 self.last_log_time = now
-                
-                self.get_logger().info(
-                    f"[THROTTLED] Distances — Front:{dist_front:.2f} m, "
-                #   f"Right:{dist_right:.2f} m, Left:{dist_left:.2f} m"
-            )
-            #self.get_logger().info(f"[THROTTLED] Sensor State: {self.sensor_state}")
-
-            if self.sensor_state["obstacle_front"]:
-                self.get_logger().info(f"[THROTTLED] FRONT OBSTACLE DETECTED at {dist_front:.2f}m")
-            #if self.sensor_state["obstacle_right"]:
-             #   self.get_logger().info(f"[THROTTLED] RIGHT OBSTACLE DETECTED at {dist_right:.2f}m")
-           # if self.sensor_state["obstacle_left"]:
-            #    self.get_logger().info(f"[THROTTLED] LEFT OBSTACLE DETECTED at {dist_left:.2f}m")
-            # log if obstacle detected
-            #self.get_logger().info(f"Distances - Front: {dist_front:.2f} m, Right: {dist_right:.2f} m, Left: {dist_left:.2f} m")
-            #if self.sensor_state["obstacle_front"]:
-             #   self.get_logger().info(f"Obstacle detected! Front: {dist_front:.2f} m")
-            #if self.sensor_state["obstacle_right"]:
-             #   self.get_logger().info(f"Obstacle detected! Right: {dist_right:.2f} m")
-            #if self.sensor_state["obstacle_left"]:
-             #   self.get_logger().info(f"Obstacle detected! Left: {dist_left:.2f} m")
-            #self.get_logger().info(f"Sensor State: {self.sensor_state}")
+                self.get_logger().info(f"[THROTTLED] Path ({path_width_ratio*100}%) min dist: {dist_front:.2f}m")
             
-        except RuntimeError as e:
-            self.get_logger().error(f"FAILED to start OAK-D: {e}")
-            raise e
+            if self.sensor_state["obstacle_front"]:
+                self.get_logger().info(f"[THROTTLED] STOP: Path Blocked at {dist_front:.2f}m")
+
+        except Exception as e:
+            self.get_logger().error(f"Processing error: {e}")
+
     # def on_depth(self, msg: Image):
     #     try:
     #         depth = self.bridge.imgmsg_to_cv2(msg, desired_encoding='16UC1')
