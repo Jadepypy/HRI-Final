@@ -116,7 +116,15 @@ class ObstacleDetector(Node):
         This represents the code structure the student built in the UI.
         In a real app, you would load this from a JSON file.
         """
-
+        self.get_logger().info("Waiting for robot controller to connect...")
+        while self.vel_pub.get_subscription_count() == 0:
+            if not rclpy.ok(): return
+            time.sleep(0.5)
+            
+        self.get_logger().info("Robot Connected! Starting Logic...")
+        
+        # Optional: Extra second to ensure the first packet isn't dropped
+        time.sleep(1.0)
         # Student Logic: Wall Follower (Right Hand Rule)
         # Defines a SCRIPT (a list of blocks) to run sequentially.
         student_code_ast = [
@@ -136,12 +144,12 @@ class ObstacleDetector(Node):
                 ]
             }
         ]
-        student_code_ast = [
-            {"type": "move_forward"},
-            {"type": "turn_left"},
-            {"type": "move_forward"},
-            {"type": "turn_right"}
-        ]
+        #student_code_ast = [
+         #   {"type": "move_forward"},
+         #   {"type": "turn_left"},
+         #   {"type": "move_forward"},
+         #   {"type": "turn_right"}
+        #]
 
         # Small delay to let sensors warm up
         time.sleep(1.0)
