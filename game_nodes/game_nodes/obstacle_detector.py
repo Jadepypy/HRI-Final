@@ -135,10 +135,14 @@ class ObstacleDetector(Node):
                         "type": "if",
                         "condition": "obstacle_front",
                         "then": [
+                            # We hit the wall. Turn away (Left).
                             {"type": "turn_right"}
                         ],
                         "else": [
-                            {"type": "move_forward"}
+                            # Path is clear. Move forward, then turn towards the wall (Right)
+                            # to make sure we don't drift away into the open room.
+                            {"type": "move_forward"},
+                            {"type": "turn_left"}
                         ]
                     }
                 ]
