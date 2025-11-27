@@ -208,7 +208,7 @@ class ObstacleDetector(Node):
         # --- ACTION BLOCKS ---
 
         elif b_type == "move_forward":
-            self.publish_for_duration(self.MOVE_SPEED, 0.0, 1.8)
+            self.publish_for_duration(self.MOVE_SPEED, 0.0, 0.5)
         elif b_type == "turn_left":
             self.publish_for_duration(0.0, self.TURN_SPEED, 3.2)
         elif b_type == "turn_right":
