@@ -8,8 +8,10 @@ import cv2
 import time
 from geometry_msgs.msg import Twist
 import threading
+from flask import Flask, request, jsonify # ### NEW: Import Flask
 
-
+app = Flask(__name__)
+robot_node = None  # Global reference so Flask can talk to ROS
 
 class ObstacleDetector(Node):
 
@@ -57,14 +59,17 @@ class ObstacleDetector(Node):
             f"ObstacleDetector running — depth:{self.depth_topic}"
         )
 
-        self.interpreter_thread = threading.Thread(target=self.run_student_program)
-        self.interpreter_thread.daemon = True
-        self.interpreter_thread.start()
+        # self.interpreter_thread = threading.Thread(target=self.run_student_program)
+        # self.interpreter_thread.daemon = True
+        # self.interpreter_thread.start()
         self.get_logger().info("Scratch Runtime Started")
 
         # self.create_subscription(Image, self.color_topic, self.on_color, 10)
 
         # self.pub = self.create_publisher(String, '/obstacle_event', 10)
+
+        self.is_running = False
+        self.current_thread = None
 
     def on_depth(self, msg):
         """Fixed: Wider path detection + Sensitivity to off-center obstacles"""
@@ -110,6 +115,41 @@ class ObstacleDetector(Node):
 
         except Exception as e:
             self.get_logger().error(f"Processing error: {e}")
+
+    def interpreter_loop(self, student_code_ast):
+        """ The main logic loop that runs the passed JSON """
+        self.get_logger().info("Interpreter Started")
+
+        # Wait for connections if needed
+        while self.vel_pub.get_subscription_count() == 0 and self.is_running:
+            if not rclpy.ok(): return
+            time.sleep(0.5)
+
+        try:
+            for block in student_code_ast:
+                if not self.is_running: break
+                self.execute_block(block)
+        except Exception as e:
+            self.get_logger().error(f"Runtime Error: {e}")
+        finally:
+            self.stop_robot()
+            self.is_running = False
+    def start_student_program(self, code_json):
+        # 1. Stop any existing program
+        self.stop_student_program()
+
+        # 2. Start new thread
+        self.is_running = True
+        self.current_thread = threading.Thread(target=self.interpreter_loop, args=(code_json,))
+        self.current_thread.daemon = True
+        self.current_thread.start()
+        self.get_logger().info("Received New Code via HTTP. Started.")
+
+    # ### NEW: Triggered by HTTP /stop or error
+    def stop_student_program(self):
+        self.is_running = False  # This breaks the loops in execute_block
+        self.stop_robot()  # Immediate halt
+        self.get_logger().info("Program Stopped.")
 
     def run_student_program(self):
         """
@@ -241,14 +281,41 @@ class ObstacleDetector(Node):
     def stop_robot(self):
         self.publish_cmd(0.0, 0.0)
 
+@app.route('/run', methods=['POST'])
+def run_code():
+    if not robot_node:
+        return jsonify({"error": "Robot initializing"}), 503
+
+    # Get JSON body
+    data = request.get_json()
+    if not data:
+        return jsonify({"error": "No JSON provided"}), 400
+
+    # Start the logic in the ROS node
+    robot_node.start_student_program(data)
+    return jsonify({"status": "started"})
+
+@app.route('/stop', methods=['POST', 'GET'])
+def stop_code():
+    if robot_node:
+        robot_node.stop_student_program()
+    return jsonify({"status": "stopped"})
+
 def main(args=None):
+    global robot_node
     rclpy.init(args=args)
-    node = ObstacleDetector()
+    robot_node = ObstacleDetector()
+
+    flask_thread = threading.Thread(target=lambda: app.run(host='0.0.0.0', port=8000, debug=False, use_reloader=False))
+    flask_thread.daemon = True
+    flask_thread.start()
+
     try:
-        rclpy.spin(node)
+        rclpy.spin(robot_node)
     except KeyboardInterrupt:
         pass
-    node.destroy_node()
+    robot_node.stop_robot()
+    robot_node.destroy_node()
     rclpy.shutdown()
 
 

@@ -435,7 +435,7 @@
 
     function handleStop() {
         console.log("Stopping robot...");
-        fetch('http://127.0.0.1:5000/stop', { method: 'POST' })
+        fetch('http://127.0.0.1:8000/stop', { method: 'POST' })
             .catch(err => console.log("Stop signal sent (Simulated - No backend)"));
     }
 
@@ -469,7 +469,7 @@
         const json = JSON.stringify(rootBlocks.map(parseBlock), null, 4);
         console.log("Sending JSON:", json);
 
-        fetch('http://127.0.0.1:5000/run', {
+        fetch('http://127.0.0.1:8000/run', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: json
