@@ -1,0 +1,755 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Robot Logic Control</title>
+    <style>
+        :root {
+            --bg-app: #ffffff;
+            --bg-workspace: #eef2f7;
+
+            /* Block Colors */
+            --control-color: #FFC107; /* Amber/Yellow */
+            --action-color: #4CAF50;  /* Green */
+            --sensor-color: #2196F3;  /* Blue */
+
+            --border-color: #ddd;
+            --font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+
+            /* Puzzle Notch Dimensions */
+            --block-padding-top: 5px;
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            font-family: var(--font-family);
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            background: var(--bg-app);
+            overflow: hidden;
+            color: #333;
+        }
+
+        /* --- Header --- */
+        header {
+            height: 65px;
+            border-bottom: 2px solid var(--border-color);
+            display: flex;
+            align-items: center;
+            padding: 0 25px;
+            gap: 20px;
+            background: white;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+            z-index: 10;
+        }
+
+        .icon-btn {
+            background: none;
+            border: none;
+            cursor: pointer;
+            padding: 8px 15px;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 8px; /* Space between icon and text */
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 700;
+            font-family: inherit;
+        }
+        .icon-btn:active { transform: scale(0.95); }
+        .icon-btn:hover { background-color: #f5f5f5; }
+
+        .icon-btn svg {
+            width: 32px;
+            height: 32px;
+            fill: currentColor;
+            filter: drop-shadow(1px 1px 1px rgba(0,0,0,0.1));
+        }
+
+        /* Button Specific Styles */
+        .btn-run { color: #2e7d32; border: 1px solid transparent; }
+        .btn-run:hover { background-color: #e8f5e9; border-color: #a5d6a7; }
+
+        .btn-stop { color: #c62828; border: 1px solid transparent; }
+        .btn-stop:hover { background-color: #ffebee; border-color: #ef9a9a; }
+
+        .btn-reset { color: #555; border: 1px solid transparent; }
+        .btn-reset:hover { background-color: #eceff1; border-color: #cfd8dc; }
+
+        /* --- Main Layout --- */
+        .main-container {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+        }
+
+        /* --- Toolbox (Left) --- */
+        .toolbox {
+            width: 380px;
+            border-right: 2px solid var(--border-color);
+            padding: 20px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            background: #fff;
+            flex-shrink: 0;
+        }
+
+        .category-header {
+            font-size: 13px;
+            text-transform: uppercase;
+            color: #888;
+            font-weight: 700;
+            margin-top: 15px;
+            margin-bottom: 5px;
+            border-bottom: 2px solid #f0f0f0;
+            padding-bottom: 4px;
+        }
+
+        /* --- Right Panel --- */
+        .right-panel {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            background: var(--bg-workspace);
+            position: relative;
+        }
+
+        /* --- Tabs --- */
+        .tabs-bar {
+            display: flex;
+            gap: 5px;
+            padding: 10px 20px 0 20px;
+            background: white;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .tab {
+            padding: 10px 30px;
+            font-size: 14px;
+            font-weight: bold;
+            border: 1px solid var(--border-color);
+            border-bottom: none;
+            border-radius: 8px 8px 0 0;
+            cursor: pointer;
+            background: #f8f9fa;
+            color: #666;
+            transition: background 0.2s;
+        }
+
+        .tab.active {
+            background: var(--control-color);
+            color: #222;
+            border-color: #e0a800; /* Darker yellow border */
+        }
+
+        /* --- Workspace --- */
+        .workspace {
+            flex: 1;
+            padding: 40px;
+            position: relative;
+            overflow: auto;
+            background-color: var(--bg-workspace);
+            background-image:
+                linear-gradient(#e1e4e8 1px, transparent 1px),
+                linear-gradient(90deg, #e1e4e8 1px, transparent 1px);
+            background-size: 40px 40px;
+        }
+
+        /* --- PUZZLE BLOCK STYLING --- */
+
+        .block {
+            position: relative;
+            color: white;
+            font-size: 13px;
+            font-weight: bold;
+            cursor: grab;
+            user-select: none;
+            display: flex;
+            align-items: center;
+            flex-wrap: wrap;
+            width: fit-content;
+            min-width: 120px;
+            margin-bottom: -4px;
+            padding: 12px 10px 8px 10px;
+
+            /* Jigsaw Shape: Convex Top, Concave Bottom */
+            clip-path: polygon(
+                0% var(--block-padding-top),
+                15px var(--block-padding-top),
+                20px 0px,
+                35px 0px,
+                40px var(--block-padding-top),
+                100% var(--block-padding-top),
+                100% 100%,
+                40px 100%,
+                35px calc(100% - 5px),
+                20px calc(100% - 5px),
+                15px 100%,
+                0% 100%
+            );
+
+            filter: drop-shadow(0px 2px 0px rgba(0,0,0,0.2));
+        }
+
+        .label-text { margin-right: 8px; pointer-events: none; }
+
+        .control { background-color: var(--control-color); }
+        .action { background-color: var(--action-color); }
+
+        .sensor {
+            background-color: var(--sensor-color);
+            border-radius: 20px;
+            padding: 6px 12px;
+            display: inline-block;
+            clip-path: none;
+            margin: 0 4px;
+            box-shadow: 0 2px 0 rgba(0,0,0,0.2);
+            filter: none;
+            font-size: 12px;
+        }
+
+        /* --- NESTED STRUCTURES --- */
+        .c-mouth {
+            width: 100%;
+            min-height: 35px;
+            background: rgba(0,0,0,0.1);
+            border-top: 4px solid rgba(0,0,0,0.15);
+            border-left: 15px solid rgba(0,0,0,0.15);
+            margin: 5px 0 5px 0;
+            padding: 5px 0 5px 0;
+            display: flex;
+            flex-direction: column;
+            border-radius: 0 4px 4px 0;
+        }
+
+        .else-separator {
+            width: calc(100% + 20px);
+            margin-left: -10px;
+            padding: 8px 10px 8px 25px;
+            font-size: 13px;
+            color: white;
+            background-color: inherit;
+            border-top: 1px solid rgba(0,0,0,0.1);
+            position: relative;
+        }
+
+        .condition-slot {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 50px;
+            height: 24px;
+            background-color: rgba(0,0,0,0.25);
+            border-radius: 12px;
+            margin: 0 5px;
+            vertical-align: middle;
+            transition: all 0.2s;
+            box-shadow: inset 1px 1px 3px rgba(0,0,0,0.3);
+        }
+        .condition-slot.drag-over {
+            background-color: #fff;
+            box-shadow: 0 0 8px #fff;
+        }
+
+        .drop-zone {
+            min-height: 100px;
+            width: 100%;
+            padding-bottom: 50px;
+        }
+
+        .placeholder {
+            height: 6px;
+            background: rgba(0,0,0,0.3);
+            border-radius: 3px;
+            margin: 2px 0;
+            width: 80px;
+            margin-left: 15px;
+        }
+
+        .block.dragging { opacity: 0.5; }
+
+        /* --- CUSTOM CONFIRM MODAL --- */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.5);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .modal-box {
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            width: 400px;
+            text-align: center;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+            animation: popIn 0.2s ease-out;
+        }
+
+        @keyframes popIn {
+            from { transform: scale(0.9); opacity: 0; }
+            to { transform: scale(1); opacity: 1; }
+        }
+
+        .modal-box h3 { margin-top: 0; color: #333; }
+        .modal-box p { font-size: 16px; color: #666; margin-bottom: 25px; }
+
+        .modal-actions {
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+        }
+
+        .modal-btn {
+            padding: 10px 30px;
+            border: none;
+            border-radius: 6px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .btn-yes { background-color: #4CAF50; color: white; }
+        .btn-yes:hover { background-color: #388E3C; }
+
+        .btn-no { background-color: #f44336; color: white; }
+        .btn-no:hover { background-color: #d32f2f; }
+
+    </style>
+</head>
+<body>
+
+    <header>
+        <button class="icon-btn btn-run" onclick="handleRunInit()">
+            <svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+            Run
+        </button>
+        <button class="icon-btn btn-stop" onclick="handleStop()">
+            <svg viewBox="0 0 24 24"><path d="M6 6h12v12H6z"/></svg>
+            Stop
+        </button>
+        <button class="icon-btn btn-reset" onclick="handleReset()">
+            <svg viewBox="0 0 24 24"><path d="M12 5V1L7 6l5 5V7c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6H4c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z"/></svg>
+            Reset
+        </button>
+    </header>
+
+    <div class="main-container">
+        <!-- TOOLBOX -->
+        <div class="toolbox" id="toolbox">
+            <div class="category-header">Control</div>
+            <div class="block control" draggable="true" data-type="forever">
+                <span class="label-text">forever</span>
+                <div class="c-mouth" data-slot="body"></div>
+            </div>
+            <div class="block control" draggable="true" data-type="repeat_until">
+                <span class="label-text">repeat until</span>
+                <div class="condition-slot" data-slot="condition"></div>
+                <div class="c-mouth" data-slot="body"></div>
+            </div>
+            <div class="block control" draggable="true" data-type="if">
+                <span class="label-text">if</span>
+                <div class="condition-slot" data-slot="condition"></div>
+                <div class="c-mouth" data-slot="then"></div>
+                <div class="else-separator">else</div>
+                <div class="c-mouth" data-slot="else"></div>
+            </div>
+            <div class="category-header">Robot Sensing</div>
+            <div class="block sensor" draggable="true" data-type="obstacle_front">
+                <span class="label-text">obstacle front?</span>
+            </div>
+            <div class="category-header">Robot Motion</div>
+            <div class="block action" draggable="true" data-type="move_forward">
+                <span class="label-text">move forward 1 step</span>
+            </div>
+            <div class="block action" draggable="true" data-type="turn_right">
+                <span class="label-text">turn right</span>
+            </div>
+            <div class="block action" draggable="true" data-type="turn_left">
+                <span class="label-text">turn left</span>
+            </div>
+        </div>
+
+        <!-- RIGHT PANEL -->
+        <div class="right-panel">
+            <div class="tabs-bar">
+                <div class="tab" onclick="switchTab('demo')" id="tab-demo">Demo</div>
+                <div class="tab" onclick="switchTab('level1')" id="tab-level1">Level 1</div>
+                <div class="tab" onclick="switchTab('level2')" id="tab-level2">Level 2</div>
+                <div class="tab" onclick="switchTab('level3')" id="tab-level3">Level 3</div>
+            </div>
+            <div class="workspace drop-zone" id="workspace"></div>
+        </div>
+    </div>
+
+    <!-- Custom Confirmation Modal -->
+    <div id="confirm-modal" class="modal-overlay">
+        <div class="modal-box">
+            <h3>Start Robot</h3>
+            <p>Is the robot in the starting position?</p>
+            <div class="modal-actions">
+                <button class="modal-btn btn-yes" onclick="confirmRun(true)">Yes</button>
+                <button class="modal-btn btn-no" onclick="confirmRun(false)">No</button>
+            </div>
+        </div>
+    </div>
+
+<script>
+    // --- STATE ---
+    let currentTab = 'level1';
+    let draggedElement = null;
+    let isNewBlock = false;
+    const placeholder = document.createElement('div');
+    placeholder.className = 'placeholder';
+    const workspace = document.getElementById('workspace');
+    const confirmModal = document.getElementById('confirm-modal');
+
+    // --- INIT ---
+    document.addEventListener('DOMContentLoaded', () => {
+        setupDragAndDrop();
+        switchTab('demo');
+    });
+
+    // --- BUTTON HANDLERS ---
+
+    function handleReset() {
+        // Reset Logic
+        workspace.innerHTML = '';
+        if (currentTab === 'demo') {
+            loadDemo();
+        } else {
+            saveLevel(currentTab); // Saves empty state
+        }
+    }
+
+    function handleStop() {
+        console.log("Stopping robot...");
+        fetch('http://127.0.0.1:5000/stop', { method: 'POST' })
+            .catch(err => console.log("Stop signal sent (Simulated - No backend)"));
+    }
+
+    // Step 1: Click Run -> Validate -> Show Modal
+    function handleRunInit() {
+        const rootBlocks = Array.from(workspace.children).filter(el => el.classList.contains('block'));
+
+        if (rootBlocks.length === 0) {
+            alert("Error: The workspace is empty. Please drag some blocks.");
+            return;
+        }
+
+        const error = validateBlocks(rootBlocks);
+        if (error) {
+            alert(`Error: ${error}`);
+            return;
+        }
+
+        // Show Custom Yes/No Modal
+        confirmModal.style.display = 'flex';
+    }
+
+    // Step 2: Handle Modal Choice
+    function confirmRun(isYes) {
+        confirmModal.style.display = 'none';
+
+        if (!isYes) return; // Do nothing if No
+
+        // Proceed if Yes
+        const rootBlocks = Array.from(workspace.children).filter(el => el.classList.contains('block'));
+        const json = JSON.stringify(rootBlocks.map(parseBlock), null, 4);
+        console.log("Sending JSON:", json);
+
+        fetch('http://127.0.0.1:5000/run', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: json
+        })
+        .then(res => {
+            if(res.ok) console.log("Run command successful");
+            else alert("Server Error");
+        })
+        .catch(err => {
+            console.error(err);
+            alert("Simulated Run: Valid JSON generated. (Server connection failed - expected in local file).");
+        });
+    }
+
+    function validateBlocks(blocks) {
+        for (let block of blocks) {
+            const type = block.dataset.type;
+
+            if (type === 'if' || type === 'repeat_until') {
+                const condSlot = block.querySelector('.condition-slot');
+                if (condSlot.children.length === 0) {
+                    return `A "${type.replace('_', ' ')}" block is missing a sensor condition.`;
+                }
+            }
+
+            const mouths = block.querySelectorAll('.c-mouth');
+            for (let mouth of mouths) {
+                const childBlocks = Array.from(mouth.children).filter(c => c.classList.contains('block'));
+                const childError = validateBlocks(childBlocks);
+                if (childError) return childError;
+            }
+        }
+        return null;
+    }
+
+    // --- TAB SYSTEM ---
+
+    function switchTab(tabName) {
+        if (currentTab !== 'demo') saveLevel(currentTab);
+
+        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+        document.getElementById(`tab-${tabName}`).classList.add('active');
+        currentTab = tabName;
+
+        workspace.innerHTML = '';
+        if (tabName === 'demo') loadDemo();
+        else loadLevel(tabName);
+    }
+
+    function saveLevel(level) {
+        const data = generateJSON();
+        localStorage.setItem(`robot_code_${level}`, data);
+    }
+
+    function loadLevel(level) {
+        const data = localStorage.getItem(`robot_code_${level}`);
+        if (data) rebuildBlocksFromJSON(JSON.parse(data), workspace);
+    }
+
+    function loadDemo() {
+        const demoData = [
+            {
+                "type": "forever",
+                "body": [
+                    {
+                        "type": "if",
+                        "condition": "obstacle_front",
+                        "then": [
+                            {"type": "turn_right"}
+                        ],
+                        "else": [
+                            {"type": "move_forward"},
+                            {"type": "turn_left"}
+                        ]
+                    }
+                ]
+            }
+        ];
+        rebuildBlocksFromJSON(demoData, workspace);
+    }
+
+    // --- DRAG & DROP ---
+
+    function setupDragAndDrop() {
+        document.querySelectorAll('#toolbox .block').forEach(block => {
+            block.addEventListener('dragstart', handleDragStartToolbox);
+            block.addEventListener('dragend', handleDragEnd);
+        });
+        workspace.addEventListener('dragover', handleDragOver);
+        workspace.addEventListener('drop', handleDrop);
+        workspace.addEventListener('dragenter', e => e.preventDefault());
+    }
+
+    function handleDragStartToolbox(e) {
+        isNewBlock = true;
+        draggedElement = e.target.cloneNode(true);
+        setupBlockEvents(draggedElement);
+        e.dataTransfer.effectAllowed = 'copy';
+        e.dataTransfer.setData('category', getCategory(e.target));
+        draggedElement.classList.add('dragging');
+    }
+
+    function handleDragStartWorkspace(e) {
+        e.stopPropagation();
+        isNewBlock = false;
+        draggedElement = e.target;
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('category', getCategory(e.target));
+        draggedElement.classList.add('dragging');
+        setTimeout(() => e.target.style.display = 'none', 0);
+    }
+
+    function handleDragEnd(e) {
+        if (draggedElement) {
+            draggedElement.style.display = 'flex';
+            draggedElement.classList.remove('dragging');
+        }
+        if (placeholder.parentNode) placeholder.parentNode.removeChild(placeholder);
+        document.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
+        draggedElement = null;
+    }
+
+    function handleDragOver(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (!draggedElement) return;
+
+        const target = e.target;
+        const category = getCategory(draggedElement);
+
+        if (category === 'sensor') {
+            if (target.classList.contains('condition-slot') && target.children.length === 0) {
+                target.classList.add('drag-over');
+                e.dataTransfer.dropEffect = 'copy';
+            } else {
+                e.dataTransfer.dropEffect = 'none';
+            }
+            return;
+        }
+
+        const dropZone = target.closest('.drop-zone, .c-mouth');
+        if (!dropZone || (!isNewBlock && draggedElement.contains(dropZone))) return;
+
+        const siblings = Array.from(dropZone.children).filter(c =>
+            c !== placeholder &&
+            c !== draggedElement &&
+            !c.classList.contains('else-separator') &&
+            c.style.display !== 'none'
+        );
+
+        let inserted = false;
+        for (let sibling of siblings) {
+            const rect = sibling.getBoundingClientRect();
+            if (e.clientY < rect.top + rect.height / 2) {
+                dropZone.insertBefore(placeholder, sibling);
+                inserted = true;
+                break;
+            }
+        }
+        if (!inserted) dropZone.appendChild(placeholder);
+    }
+
+    function handleDrop(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        document.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
+        if (placeholder.parentNode) placeholder.parentNode.removeChild(placeholder);
+
+        const target = e.target;
+        const category = getCategory(draggedElement);
+
+        if (category === 'sensor') {
+            if (target.classList.contains('condition-slot') && target.children.length === 0) {
+                let finalBlock = isNewBlock ? draggedElement.cloneNode(true) : draggedElement;
+                finalBlock.style.display = 'inline-flex';
+                finalBlock.classList.remove('dragging');
+                if(isNewBlock) setupBlockEvents(finalBlock);
+                target.appendChild(finalBlock);
+            }
+            return;
+        }
+
+        let dropZone = target.closest('.drop-zone, .c-mouth');
+        if (!dropZone) return;
+
+        let finalBlock = isNewBlock ? draggedElement.cloneNode(true) : draggedElement;
+        finalBlock.style.display = 'flex';
+        finalBlock.classList.remove('dragging');
+
+        const siblings = Array.from(dropZone.children).filter(c => c !== finalBlock && !c.classList.contains('else-separator'));
+        let inserted = false;
+        for (let sibling of siblings) {
+            const rect = sibling.getBoundingClientRect();
+            if (e.clientY < rect.top + rect.height / 2) {
+                dropZone.insertBefore(finalBlock, sibling);
+                inserted = true;
+                break;
+            }
+        }
+        if (!inserted) dropZone.appendChild(finalBlock);
+
+        if(isNewBlock) setupBlockEvents(finalBlock);
+    }
+
+    function setupBlockEvents(block) {
+        block.addEventListener('dragstart', handleDragStartWorkspace);
+        block.querySelectorAll('.block').forEach(b => {
+            b.removeEventListener('dragstart', handleDragStartToolbox);
+            b.addEventListener('dragstart', handleDragStartWorkspace);
+        });
+    }
+
+    function getCategory(el) {
+        if (el.classList.contains('sensor')) return 'sensor';
+        if (el.classList.contains('control')) return 'control';
+        if (el.classList.contains('action')) return 'action';
+        return 'unknown';
+    }
+
+    // --- JSON HELPERS ---
+
+    function generateJSON() {
+        const rootBlocks = Array.from(workspace.children).filter(el => el.classList.contains('block'));
+        return JSON.stringify(rootBlocks.map(parseBlock), null, 4);
+    }
+
+    function parseBlock(blockEl) {
+        const type = blockEl.dataset.type;
+        const obj = { type };
+
+        if (type === 'forever') {
+            obj.body = getChildBlocks(blockEl, 'body');
+        } else if (type === 'repeat_until') {
+            obj.condition = getCondition(blockEl);
+            obj.body = getChildBlocks(blockEl, 'body');
+        } else if (type === 'if') {
+            obj.condition = getCondition(blockEl);
+            obj.then = getChildBlocks(blockEl, 'then');
+            obj.else = getChildBlocks(blockEl, 'else');
+        }
+        return obj;
+    }
+
+    function getChildBlocks(parent, slot) {
+        const container = parent.querySelector(`.c-mouth[data-slot="${slot}"]`);
+        if (!container) return [];
+        return Array.from(container.children)
+            .filter(el => el.classList.contains('block'))
+            .map(parseBlock);
+    }
+
+    function getCondition(parent) {
+        const slot = parent.querySelector('.condition-slot');
+        return (slot && slot.children[0]) ? slot.children[0].dataset.type : null;
+    }
+
+    function rebuildBlocksFromJSON(jsonArray, container) {
+        jsonArray.forEach(node => {
+            const el = createBlockElement(node.type);
+
+            if (node.body) rebuildBlocksFromJSON(node.body, el.querySelector('[data-slot="body"]'));
+            if (node.then) rebuildBlocksFromJSON(node.then, el.querySelector('[data-slot="then"]'));
+            if (node.else) rebuildBlocksFromJSON(node.else, el.querySelector('[data-slot="else"]'));
+
+            if (node.condition) {
+                const sensor = createBlockElement(node.condition);
+                sensor.style.display = 'inline-flex';
+                el.querySelector('.condition-slot').appendChild(sensor);
+            }
+            container.appendChild(el);
+        });
+    }
+
+    function createBlockElement(type) {
+        const tmpl = document.querySelector(`#toolbox .block[data-type="${type}"]`);
+        if(!tmpl) return document.createElement('div');
+        const clone = tmpl.cloneNode(true);
+        setupBlockEvents(clone);
+        return clone;
+    }
+</script>
+</body>
+</html>
