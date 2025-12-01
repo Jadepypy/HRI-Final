@@ -283,6 +283,7 @@ class ObstacleDetector(Node):
 
 @app.route('/run', methods=['POST'])
 def run_code():
+    robot_node.logger.info("HTTP /run called")
     if not robot_node:
         return jsonify({"error": "Robot initializing"}), 503
 
