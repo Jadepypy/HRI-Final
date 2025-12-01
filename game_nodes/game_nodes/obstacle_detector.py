@@ -283,7 +283,7 @@ class ObstacleDetector(Node):
 
 @app.route('/run', methods=['POST'])
 def run_code():
-    robot_node.logger.info("HTTP /run called")
+    robot_node.get_logger().info("HTTP /run called")
     if not robot_node:
         return jsonify({"error": "Robot initializing"}), 503
 
@@ -298,6 +298,7 @@ def run_code():
 
 @app.route('/stop', methods=['POST', 'GET'])
 def stop_code():
+    robot_node.get_logger().info("HTTP /stop called")
     if robot_node:
         robot_node.stop_student_program()
     return jsonify({"status": "stopped"})
@@ -310,6 +311,7 @@ def main(args=None):
     flask_thread = threading.Thread(target=lambda: app.run(host='0.0.0.0', port=8000, debug=False, use_reloader=False))
     flask_thread.daemon = True
     flask_thread.start()
+
 
     try:
         rclpy.spin(robot_node)
