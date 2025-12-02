@@ -99,6 +99,13 @@
             gap: 15px;
             background: #fff;
             flex-shrink: 0;
+            transition: background-color 0.2s;
+        }
+
+        /* Visual cue for deletion */
+        .toolbox.trash-active {
+            background-color: #ffebee;
+            border-right-color: #f44336;
         }
 
         .category-header {
@@ -346,7 +353,7 @@
     </header>
 
     <div class="main-container">
-        <!-- TOOLBOX -->
+        <!-- TOOLBOX (Dropping here now deletes blocks) -->
         <div class="toolbox" id="toolbox">
             <div class="category-header">Control</div>
             <div class="block control" draggable="true" data-type="forever">
@@ -413,6 +420,7 @@
     const placeholder = document.createElement('div');
     placeholder.className = 'placeholder';
     const workspace = document.getElementById('workspace');
+    const toolbox = document.getElementById('toolbox');
     const confirmModal = document.getElementById('confirm-modal');
 
     // --- INIT ---
@@ -424,12 +432,11 @@
     // --- BUTTON HANDLERS ---
 
     function handleReset() {
-        // Reset Logic
         workspace.innerHTML = '';
         if (currentTab === 'demo') {
             loadDemo();
         } else {
-            saveLevel(currentTab); // Saves empty state
+            saveLevel(currentTab);
         }
     }
 
@@ -439,9 +446,11 @@
             .catch(err => console.log("Stop signal sent (Simulated - No backend)"));
     }
 
-    // Step 1: Click Run -> Validate -> Show Modal
     function handleRunInit() {
-        const rootBlocks = Array.from(workspace.children).filter(el => el.classList.contains('block'));
+        // Generate JSON with SAFETY filter for invisible blocks
+        const rootBlocks = Array.from(workspace.children).filter(el =>
+            el.classList.contains('block') && el.style.display !== 'none'
+        );
 
         if (rootBlocks.length === 0) {
             alert("Error: The workspace is empty. Please drag some blocks.");
@@ -458,14 +467,15 @@
         confirmModal.style.display = 'flex';
     }
 
-    // Step 2: Handle Modal Choice
     function confirmRun(isYes) {
         confirmModal.style.display = 'none';
 
-        if (!isYes) return; // Do nothing if No
+        if (!isYes) return;
 
-        // Proceed if Yes
-        const rootBlocks = Array.from(workspace.children).filter(el => el.classList.contains('block'));
+        // Re-generate JSON specifically for sending to backend
+        const rootBlocks = Array.from(workspace.children).filter(el =>
+            el.classList.contains('block') && el.style.display !== 'none'
+        );
         const json = JSON.stringify(rootBlocks.map(parseBlock), null, 4);
         console.log("Sending JSON:", json);
 
@@ -497,7 +507,10 @@
 
             const mouths = block.querySelectorAll('.c-mouth');
             for (let mouth of mouths) {
-                const childBlocks = Array.from(mouth.children).filter(c => c.classList.contains('block'));
+                // Recursive check, ensuring we ignore hidden blocks here too
+                const childBlocks = Array.from(mouth.children).filter(c =>
+                    c.classList.contains('block') && c.style.display !== 'none'
+                );
                 const childError = validateBlocks(childBlocks);
                 if (childError) return childError;
             }
@@ -554,14 +567,51 @@
     // --- DRAG & DROP ---
 
     function setupDragAndDrop() {
+        // Toolbox Blocks (Source)
         document.querySelectorAll('#toolbox .block').forEach(block => {
             block.addEventListener('dragstart', handleDragStartToolbox);
             block.addEventListener('dragend', handleDragEnd);
         });
+
+        // Toolbox Container (Delete Zone)
+        toolbox.addEventListener('dragover', handleDragOverToolbox);
+        toolbox.addEventListener('drop', handleDropToolbox);
+        toolbox.addEventListener('dragleave', () => toolbox.classList.remove('trash-active'));
+
+        // Workspace
         workspace.addEventListener('dragover', handleDragOver);
         workspace.addEventListener('drop', handleDrop);
         workspace.addEventListener('dragenter', e => e.preventDefault());
     }
+
+    // --- TOOLBOX EVENTS (DELETE LOGIC) ---
+
+    function handleDragOverToolbox(e) {
+        e.preventDefault();
+        // Only allow drop (deletion) if it came from the workspace (not new)
+        if (!isNewBlock) {
+            e.dataTransfer.dropEffect = 'move';
+            toolbox.classList.add('trash-active'); // Visual cue
+        } else {
+            e.dataTransfer.dropEffect = 'none';
+        }
+    }
+
+    function handleDropToolbox(e) {
+        e.preventDefault();
+        toolbox.classList.remove('trash-active');
+
+        if (isNewBlock) return; // Can't delete what hasn't been added
+
+        // DELETE THE BLOCK
+        if (draggedElement && draggedElement.parentNode) {
+            draggedElement.parentNode.removeChild(draggedElement);
+        }
+        // We do NOT set draggedElement to null here, so handleDragEnd can clean up if needed,
+        // but since it's removed from DOM, it won't show up in JSON.
+    }
+
+    // --- GENERAL DRAG EVENTS ---
 
     function handleDragStartToolbox(e) {
         isNewBlock = true;
@@ -579,16 +629,20 @@
         e.dataTransfer.effectAllowed = 'move';
         e.dataTransfer.setData('category', getCategory(e.target));
         draggedElement.classList.add('dragging');
+        // Hide it so it looks like we picked it up
         setTimeout(() => e.target.style.display = 'none', 0);
     }
 
     function handleDragEnd(e) {
         if (draggedElement) {
+            // Restore visibility (in case it wasn't deleted but dropped incorrectly)
+            // If it WAS deleted, this style change affects the detached node (harmless)
             draggedElement.style.display = 'flex';
             draggedElement.classList.remove('dragging');
         }
         if (placeholder.parentNode) placeholder.parentNode.removeChild(placeholder);
         document.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
+        toolbox.classList.remove('trash-active');
         draggedElement = null;
     }
 
@@ -692,7 +746,10 @@
     // --- JSON HELPERS ---
 
     function generateJSON() {
-        const rootBlocks = Array.from(workspace.children).filter(el => el.classList.contains('block'));
+        // Filter out blocks that are display:none (deleted or mid-drag)
+        const rootBlocks = Array.from(workspace.children).filter(el =>
+            el.classList.contains('block') && el.style.display !== 'none'
+        );
         return JSON.stringify(rootBlocks.map(parseBlock), null, 4);
     }
 
@@ -717,13 +774,15 @@
         const container = parent.querySelector(`.c-mouth[data-slot="${slot}"]`);
         if (!container) return [];
         return Array.from(container.children)
-            .filter(el => el.classList.contains('block'))
+            .filter(el => el.classList.contains('block') && el.style.display !== 'none')
             .map(parseBlock);
     }
 
     function getCondition(parent) {
         const slot = parent.querySelector('.condition-slot');
-        return (slot && slot.children[0]) ? slot.children[0].dataset.type : null;
+        // Ensure we don't pick up hidden sensor (if that were possible)
+        const child = slot && slot.children[0];
+        return (child && child.style.display !== 'none') ? child.dataset.type : null;
     }
 
     function rebuildBlocksFromJSON(jsonArray, container) {
