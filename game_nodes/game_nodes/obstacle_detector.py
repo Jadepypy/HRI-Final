@@ -9,8 +9,14 @@ import time
 from geometry_msgs.msg import Twist
 import threading
 from flask import Flask, request, jsonify # ### NEW: Import Flask
+# fix cors
+from flask_cors import CORS
 
 app = Flask(__name__)
+
+# ENABLE CORS: Allow all domains (*) to access all routes (/*)
+# This is critical for development when your frontend and robot have different IPs.
+CORS(app, resources={r"/*": {"origins": "*"}})
 robot_node = None  # Global reference so Flask can talk to ROS
 
 class ObstacleDetector(Node):
@@ -133,7 +139,7 @@ class ObstacleDetector(Node):
             self.get_logger().error(f"Runtime Error: {e}")
         finally:
             self.stop_robot()
-            self.is_running = False
+
     def start_student_program(self, code_json):
         # 1. Stop any existing program
         self.stop_student_program()
@@ -148,6 +154,13 @@ class ObstacleDetector(Node):
     # ### NEW: Triggered by HTTP /stop or error
     def stop_student_program(self):
         self.is_running = False  # This breaks the loops in execute_block
+        if self.current_thread is not None and self.current_thread.is_alive():
+            # Wait up to 1 second for it to finish gracefully
+            self.current_thread.join(timeout=1.0)
+
+            # If it's still alive after 1 second, we have a problem (stuck loop)
+            if self.current_thread.is_alive():
+                self.get_logger().warn("Old thread is stuck! Starting new one anyway...")
         self.stop_robot()  # Immediate halt
         self.get_logger().info("Program Stopped.")
 
@@ -213,7 +226,7 @@ class ObstacleDetector(Node):
         """Recursive function to run any block"""
 
         # Safety Check: Stop if ROS is shutting down
-        if not rclpy.ok():
+        if not self.is_running or not rclpy.ok():
             return
 
         b_type = block.get("type")
