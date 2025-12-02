@@ -18,13 +18,13 @@ def generate_launch_description():
             executable='obstacle_detector',
             name='obstacle_detector',
             output='screen'
-        ),
+        )
 
         # Navigator
-        Node(
-            package='game_nodes',
-            executable='navigator',
-            name='navigator',
-            output='screen'
-        ),
+       # Node(
+       # package='game_nodes',
+        #    executable='navigator',
+        #    name='navigator',
+        #    output='screen'
+       # ),
     ])
