@@ -8,16 +8,15 @@ import cv2
 import time
 from geometry_msgs.msg import Twist
 import threading
-from flask import Flask, request, jsonify # ### NEW: Import Flask
-# fix cors
+from flask import Flask, request, jsonify
 from flask_cors import CORS
 
 app = Flask(__name__)
 
 # ENABLE CORS: Allow all domains (*) to access all routes (/*)
-# This is critical for development when your frontend and robot have different IPs.
 CORS(app, resources={r"/*": {"origins": "*"}})
 robot_node = None  # Global reference so Flask can talk to ROS
+
 
 class ObstacleDetector(Node):
 
@@ -26,7 +25,7 @@ class ObstacleDetector(Node):
         self.bridge = CvBridge()
 
         # --- Robot Constants ---
-        self.STEP_SIZE = 0.5  # meters for obstacle detection
+        self.STEP_SIZE = 0.5
         self.MOVE_SPEED = 0.2
         self.TURN_SPEED = 0.5
 
@@ -35,230 +34,135 @@ class ObstacleDetector(Node):
             "obstacle_front": False,
             "obstacle_left": False
         }
-        self.latest_depth = None
-
-        # time-based logging
-        self.last_log_time = 0.0
-        self.LOG_INTERVAL = 10.0   # seconds between log messages
 
         self.depth_topic = '/stereo/converted_depth'
-        # self.color_topic = '/oakd/rgb/preview/image_raw'
-
-        # self.thresh_m = 2.0
-        # self.crop_ratio = 0.3
-        # # self.yellow_percent_threshold = 3
-        #
-        # self.last_state = 'clear'
-        #
-        # self.obstacle_frames_needed = 1
-        # self.clear_frames_needed = 2
-        # self.yellow_frames_needed = 2
-        #
-        # self.obstacle_count = 0
-        # self.clear_count = 0
-        # self.yellow_count = 0
-
         self.vel_pub = self.create_publisher(Twist, '/cmd_vel', 10)
-
         self.create_subscription(Image, self.depth_topic, self.on_depth, 10)
-        self.get_logger().info(
-            f"ObstacleDetector running — depth:{self.depth_topic}"
-        )
 
-        # self.interpreter_thread = threading.Thread(target=self.run_student_program)
-        # self.interpreter_thread.daemon = True
-        # self.interpreter_thread.start()
-        self.get_logger().info("Scratch Runtime Started")
+        self.get_logger().info(f"ObstacleDetector running — depth:{self.depth_topic}")
 
-        # self.create_subscription(Image, self.color_topic, self.on_color, 10)
-
-        # self.pub = self.create_publisher(String, '/obstacle_event', 10)
-
+        # --- Thread Control Flags ---
         self.is_running = False
         self.current_thread = None
 
     def on_depth(self, msg):
-        """Fixed: Wider path detection + Sensitivity to off-center obstacles"""
         try:
             depth = self.bridge.imgmsg_to_cv2(msg, desired_encoding='16UC1')
             depth_m = depth.astype(np.float32) / 1000.0
             h, w = depth_m.shape
 
-            # FIX 1: Widen the gaze (0.2 was too narrow, 0.6 covers robot width)
-            # Adjust this between 0.5 and 0.8 depending on how fat your robot is.
-            path_width_ratio = 0.6 
+            path_width_ratio = 0.6
             crop_w = int(w * path_width_ratio)
             x_start = (w - crop_w) // 2
-            
-            front_view = depth_m[:, x_start : x_start + crop_w]
 
-            # Filter valid points
+            front_view = depth_m[:, x_start: x_start + crop_w]
             valid_front = front_view[front_view > 0.05]
 
             if valid_front.size > 0:
-                # FIX 2: Use Percentile instead of Median
-                # Median (50%) ignores obstacles if they are only on one side of the path.
-                # Percentile(5) grabs the closest objects, even if they are off-center.
                 dist_front = np.percentile(valid_front, 5)
             else:
                 dist_front = 9.9
 
-            # Update State
             self.sensor_state["obstacle_front"] = (dist_front < self.STEP_SIZE)
-            
-            # Reset side states
             self.sensor_state["obstacle_left"] = False
             self.sensor_state["obstacle_right"] = False
-
-            # Logging
-            # now = self.get_clock().now().nanoseconds / 1e9
-            # if now - self.last_log_time > self.LOG_INTERVAL:
-            #     self.last_log_time = now
-            #     self.get_logger().info(f"[THROTTLED] Path ({path_width_ratio*100}%) min dist: {dist_front:.2f}m")
-            #
-            # if self.sensor_state["obstacle_front"]:
-            #     self.get_logger().info(f"[THROTTLED] STOP: Path Blocked at {dist_front:.2f}m")
 
         except Exception as e:
             self.get_logger().error(f"Processing error: {e}")
 
+    # ---------------------------------------------------------
+    # THREAD LIFECYCLE (FIXED)
+    # ---------------------------------------------------------
+
+    def start_student_program(self, code_json):
+        self.get_logger().info("Request to START...")
+
+        # 1. Signal Stop
+        self.stop_student_program()
+
+        # 2. Wait for old thread
+        if self.current_thread is not None and self.current_thread.is_alive():
+            self.current_thread.join(timeout=3.0)  # Give it 3 seconds
+
+            # CRITICAL SAFETY CHECK
+            if self.current_thread.is_alive():
+                self.get_logger().error("CRITICAL: Old thread is STUCK. Cannot start new program.")
+                # We return here to prevent the 'Two Driver' crash
+                # The user will see that the robot didn't start, which is safer than it going crazy.
+                return
+
+                # 3. Only if the coast is clear, start the new one
+        self.is_running = True
+        self.current_thread = threading.Thread(target=self.interpreter_loop, args=(code_json,))
+        self.current_thread.daemon = True
+        self.current_thread.start()
+        self.get_logger().info("New Program Thread Started.")
+
+    def stop_student_program(self):
+        self.is_running = False  # Signal the thread to stop
+        self.stop_robot()  # Immediate motor halt
+        self.get_logger().info("Stop Signal Sent.")
+
     def interpreter_loop(self, student_code_ast):
         """ The main logic loop that runs the passed JSON """
-        self.get_logger().info("Interpreter Started")
+        self.get_logger().info("Interpreter Loop Started")
 
-        # Wait for connections if needed
-        while self.vel_pub.get_subscription_count() == 0 and self.is_running:
-            if not rclpy.ok(): return
+        # Wait for connections
+        while self.vel_pub.get_subscription_count() == 0:
+            if not rclpy.ok() or not self.is_running: return
             time.sleep(0.5)
 
         try:
             for block in student_code_ast:
+                # CHECK: Stop immediately if flag is false
                 if not self.is_running: break
                 self.execute_block(block)
         except Exception as e:
             self.get_logger().error(f"Runtime Error: {e}")
         finally:
+            # CLEANUP: Ensure robot stops and state is clean when thread ends
             self.stop_robot()
+            self.is_running = False
+            self.get_logger().info("Interpreter Loop Finished")
 
-    def start_student_program(self, code_json):
-        # 1. Stop any existing program
-        self.stop_student_program()
-
-        # 2. Start new thread
-        self.is_running = True
-        self.current_thread = threading.Thread(target=self.interpreter_loop, args=(code_json,))
-        self.current_thread.daemon = True
-        self.current_thread.start()
-        self.get_logger().info("Received New Code via HTTP. Started.")
-
-    # ### NEW: Triggered by HTTP /stop or error
-    def stop_student_program(self):
-        self.is_running = False  # This breaks the loops in execute_block
-        if self.current_thread is not None and self.current_thread.is_alive():
-            # Wait up to 1 second for it to finish gracefully
-            self.current_thread.join(timeout=1.0)
-
-            # If it's still alive after 1 second, we have a problem (stuck loop)
-            if self.current_thread.is_alive():
-                self.get_logger().warn("Old thread is stuck! Starting new one anyway...")
-        self.stop_robot()  # Immediate halt
-        self.get_logger().info("Program Stopped.")
-
-    def run_student_program(self):
-        """
-        This represents the code structure the student built in the UI.
-        In a real app, you would load this from a JSON file.
-        """
-        self.get_logger().info("Waiting for robot controller to connect...")
-        while self.vel_pub.get_subscription_count() == 0:
-            if not rclpy.ok(): return
-            time.sleep(0.5)
-            
-        self.get_logger().info("Robot Connected! Starting Logic...")
-        
-        # Optional: Extra second to ensure the first packet isn't dropped
-        time.sleep(1.0)
-        # Student Logic: Wall Follower (Right Hand Rule)
-        # Defines a SCRIPT (a list of blocks) to run sequentially.
-        student_code_ast = [
-            {
-                "type": "forever",
-                "body": [
-                    {
-                        "type": "if",
-                        "condition": "obstacle_front",
-                        "then": [
-                            # We hit the wall. Turn away (Left).
-                            {"type": "turn_right"}
-                        ],
-                        "else": [
-                            # Path is clear. Move forward, then turn towards the wall (Right)
-                            # to make sure we don't drift away into the open room.
-                            {"type": "move_forward"},
-                            {"type": "turn_left"}
-                        ]
-                    }
-                ]
-            }
-        ]
-        #student_code_ast = [
-         #   {"type": "move_forward"},
-         #   {"type": "turn_left"},
-         #   {"type": "move_forward"},
-         #   {"type": "turn_right"}
-        #]
-
-        # Small delay to let sensors warm up
-        time.sleep(1.0)
-        self.get_logger().info("Starting Student Code...")
-
-        try:
-            # Execute the script (list of blocks) sequentially
-            # This handles top-level sequential blocks (e.g., "Move", then "Turn", then "Forever")
-            for block in student_code_ast:
-                self.execute_block(block)
-        except Exception as e:
-            self.get_logger().error(f"Runtime Error: {e}")
-        finally:
-            self.stop_robot()
+    # ---------------------------------------------------------
+    # EXECUTION LOGIC (FIXED)
+    # ---------------------------------------------------------
 
     def execute_block(self, block):
         """Recursive function to run any block"""
 
-        # Safety Check: Stop if ROS is shutting down
+        # CHECK 1: Immediate Exit
         if not self.is_running or not rclpy.ok():
             return
 
         b_type = block.get("type")
-        self.get_logger().info(f"execute bock {b_type}")
-        # --- CONTROL FLOW BLOCKS ---
 
         if b_type == "forever":
-            while rclpy.ok():
+            # CHECK 2: Loop Condition must include is_running
+            while rclpy.ok() and self.is_running:
                 for sub_block in block.get("body", []):
+                    if not self.is_running: return  # Break inner loop
                     self.execute_block(sub_block)
-                # Small sleep to prevent 100% CPU usage
+                time.sleep(0.05)
+
+        elif b_type == "until":
+            condition_key = block.get("condition")
+            # CHECK 3: Loop Condition must include is_running
+            while not self.sensor_state.get(condition_key, False) and rclpy.ok() and self.is_running:
+                for sub_block in block.get("body", []):
+                    if not self.is_running: return
+                    self.execute_block(sub_block)
                 time.sleep(0.05)
 
         elif b_type == "if":
             condition_key = block.get("condition")
-            # Check sensor state
             if self.sensor_state.get(condition_key, False):
                 for sub_block in block.get("then", []):
                     self.execute_block(sub_block)
             else:
                 for sub_block in block.get("else", []):
                     self.execute_block(sub_block)
-
-        elif b_type == "until":
-            # "Repeat Until <Condition>"
-            condition_key = block.get("condition")
-            while not self.sensor_state.get(condition_key, False) and rclpy.ok():
-                for sub_block in block.get("body", []):
-                    self.execute_block(sub_block)
-                time.sleep(0.05)
-
-        # --- ACTION BLOCKS ---
 
         elif b_type == "move_forward":
             self.publish_for_duration(self.MOVE_SPEED, 0.0, 0.5)
@@ -267,23 +171,27 @@ class ObstacleDetector(Node):
         elif b_type == "turn_right":
             self.publish_for_duration(0.0, -self.TURN_SPEED, 3.2)
         elif b_type == "stop":
-            self.publish_cmd(0.0, 0.0)
+            self.stop_robot()
             time.sleep(0.1)
 
-    # --- ACTUATOR HELPERS ---
+    # ---------------------------------------------------------
+    # ACTUATOR HELPERS (FIXED)
+    # ---------------------------------------------------------
+
     def publish_for_duration(self, linear, angular, duration):
         """
-        Publishes the command repeatedly for the given duration.
-        This prevents the robot's safety watchdog from stopping the motor.
+        Moves robot, but CHECKS self.is_running constantly.
+        This fixes the latency issue.
         """
         end_time = time.time() + duration
-        while time.time() < end_time and rclpy.ok():
+
+        # CHECK 4: The Latency Killer
+        # We add 'and self.is_running' so the loop breaks instantly on Stop.
+        while time.time() < end_time and rclpy.ok() and self.is_running:
             self.publish_cmd(linear, angular)
-            # Sleep for 100ms (10Hz publish rate)
             time.sleep(0.1)
 
-        # Stop explicitly at the end of the duration
-        self.publish_cmd(0.0, 0.0)
+        self.stop_robot()
 
     def publish_cmd(self, linear, angular):
         msg = Twist()
@@ -294,42 +202,45 @@ class ObstacleDetector(Node):
     def stop_robot(self):
         self.publish_cmd(0.0, 0.0)
 
+
+# --- FLASK ROUTES ---
+
 @app.route('/run', methods=['POST'])
 def run_code():
-    robot_node.get_logger().info("HTTP /run called")
     if not robot_node:
         return jsonify({"error": "Robot initializing"}), 503
 
-    # Get JSON body
     data = request.get_json()
     if not data:
         return jsonify({"error": "No JSON provided"}), 400
 
-    # Start the logic in the ROS node
+    # Start logic in background thread (Non-blocking)
     robot_node.start_student_program(data)
     return jsonify({"status": "started"})
 
+
 @app.route('/stop', methods=['POST', 'GET'])
 def stop_code():
-    robot_node.get_logger().info("HTTP /stop called")
     if robot_node:
         robot_node.stop_student_program()
     return jsonify({"status": "stopped"})
+
 
 def main(args=None):
     global robot_node
     rclpy.init(args=args)
     robot_node = ObstacleDetector()
 
+    # Start Flask in separate thread
     flask_thread = threading.Thread(target=lambda: app.run(host='0.0.0.0', port=8000, debug=False, use_reloader=False))
     flask_thread.daemon = True
     flask_thread.start()
-
 
     try:
         rclpy.spin(robot_node)
     except KeyboardInterrupt:
         pass
+
     robot_node.stop_robot()
     robot_node.destroy_node()
     rclpy.shutdown()
