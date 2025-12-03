@@ -171,9 +171,9 @@ class ObstacleDetector(Node):
         elif b_type == "move_forward":
             self.publish_for_duration(self.MOVE_SPEED, 0.0, 0.5)
         elif b_type == "turn_left":
-            self.publish_for_duration(0.0, self.TURN_SPEED, 3.2)
+            self.publish_for_duration(0.0, self.TURN_SPEED, 3.125)
         elif b_type == "turn_right":
-            self.publish_for_duration(0.0, -self.TURN_SPEED, 3.2)
+            self.publish_for_duration(0.0, -self.TURN_SPEED, 3.125)
         elif b_type == "stop":
             self.stop_robot()
             time.sleep(0.1)
