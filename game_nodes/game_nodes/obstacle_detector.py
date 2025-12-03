@@ -44,35 +44,54 @@ class ObstacleDetector(Node):
         # --- Thread Control Flags ---
         self.is_running = False
         self.current_thread = None
+        self.trigger_count = 0
+        self.TRIGGER_THRESHOLD = 3
 
     def on_depth(self, msg):
         try:
+            # 1. Convert ROS image to OpenCV (Meters)
             depth = self.bridge.imgmsg_to_cv2(msg, desired_encoding='16UC1')
             depth_m = depth.astype(np.float32) / 1000.0
             h, w = depth_m.shape
 
+            # 2. Define Front Zone (Center 60%)
             path_width_ratio = 0.6
             crop_w = int(w * path_width_ratio)
             x_start = (w - crop_w) // 2
-
-            front_view = depth_m[:, x_start: x_start + crop_w]
-            valid_front = front_view[front_view > 0.05]
-
-            if valid_front.size > 0:
-                dist_front = np.percentile(valid_front, 5)
-            else:
-                dist_front = 9.9
-
-            self.sensor_state["obstacle_front"] = (dist_front < self.STEP_SIZE)
             
-            #if self.sensor_state["obstacle_front"]:
-            #    self.get_logger().info("in front!")
+            view_front = depth_m[:, x_start : x_start + crop_w]
+
+            # 3. Robust Distance Calculation (Noise Filter)
+            # Filter out noise (0.0) and far background (> 2.0m)
+            valid_pixels = view_front[(view_front > 0.05) & (view_front < 2.0)]
+            
+            # Mass Check: If fewer than 5% of pixels are valid, it is noise.
+            total_pixels = view_front.size
+            if valid_pixels.size < (total_pixels * 0.05):
+                dist_front = 9.9
+            else:
+                # Median Check: Smoothes out the data
+                dist_front = np.median(valid_pixels)
+
+            # 4. Debounce Logic (Time Filter)
+            # We assume "False" until proven "True" 3 times in a row
+            raw_detection = (dist_front < self.STEP_SIZE)
+
+            if raw_detection:
+                self.trigger_count += 1
+            else:
+                self.trigger_count = 0 # Reset immediately if we see a clear path
+
+            # 5. Update State
+            # Only trigger if the counter hits the threshold
+            self.sensor_state["obstacle_front"] = (self.trigger_count >= self.TRIGGER_THRESHOLD)
+            
+            # Reset sides
             self.sensor_state["obstacle_left"] = False
             self.sensor_state["obstacle_right"] = False
 
         except Exception as e:
             self.get_logger().error(f"Processing error: {e}")
-
     # ---------------------------------------------------------
     # THREAD LIFECYCLE (FIXED)
     # ---------------------------------------------------------
