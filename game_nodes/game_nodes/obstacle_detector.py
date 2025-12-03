@@ -64,6 +64,9 @@ class ObstacleDetector(Node):
                 dist_front = 9.9
 
             self.sensor_state["obstacle_front"] = (dist_front < self.STEP_SIZE)
+            
+            #if self.sensor_state["obstacle_front"]:
+            #    self.get_logger().info("in front!")
             self.sensor_state["obstacle_left"] = False
             self.sensor_state["obstacle_right"] = False
 
@@ -146,7 +149,8 @@ class ObstacleDetector(Node):
                     self.execute_block(sub_block)
                 time.sleep(0.05)
 
-        elif b_type == "until":
+        elif b_type == "repeat_until":
+            self.get_logger().info("repeat until")
             condition_key = block.get("condition")
             # CHECK 3: Loop Condition must include is_running
             while not self.sensor_state.get(condition_key, False) and rclpy.ok() and self.is_running:
