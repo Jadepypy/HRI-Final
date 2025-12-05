@@ -25,7 +25,7 @@ class ObstacleDetector(Node):
         self.bridge = CvBridge()
 
         # --- Robot Constants ---
-        self.STEP_SIZE = 0.5
+        self.STEP_SIZE = 0.6
         self.MOVE_SPEED = 0.2
         self.TURN_SPEED = 0.5
 
@@ -85,7 +85,8 @@ class ObstacleDetector(Node):
             # 5. Update State
             # Only trigger if the counter hits the threshold
             self.sensor_state["obstacle_front"] = (self.trigger_count >= self.TRIGGER_THRESHOLD)
-            
+            if self.sensor_state["obstacle_front"]:
+                self.get_logger().info("obstacle in front")
             # Reset sides
             self.sensor_state["obstacle_left"] = False
             self.sensor_state["obstacle_right"] = False
@@ -190,9 +191,9 @@ class ObstacleDetector(Node):
         elif b_type == "move_forward":
             self.publish_for_duration(self.MOVE_SPEED, 0.0, 0.5)
         elif b_type == "turn_left":
-            self.publish_for_duration(0.0, self.TURN_SPEED, 3.125)
+            self.publish_for_duration(0.0, self.TURN_SPEED, 3.1)
         elif b_type == "turn_right":
-            self.publish_for_duration(0.0, -self.TURN_SPEED, 3.125)
+            self.publish_for_duration(0.0, -self.TURN_SPEED, 3.1)
         elif b_type == "stop":
             self.stop_robot()
             time.sleep(0.1)
